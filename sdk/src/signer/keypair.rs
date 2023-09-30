@@ -23,7 +23,7 @@ use {
 /// A vanilla Ed25519 key pair
 #[wasm_bindgen]
 #[derive(Debug)]
-pub struct Keypair(ed25519_dalek::Keypair);
+pub struct Keypair(ed25519_dalek::SigningKey);
 
 impl Keypair {
     /// Constructs a new, random `Keypair` using a caller-provided RNG
@@ -31,7 +31,7 @@ impl Keypair {
     where
         R: CryptoRng + RngCore,
     {
-        Self(ed25519_dalek::Keypair::generate(csprng))
+        Self(ed25519_dalek::SigningKey::generate(csprng))
     }
 
     /// Constructs a new, random `Keypair` using `OsRng`
@@ -42,12 +42,12 @@ impl Keypair {
 
     /// Recovers a `Keypair` from a byte array
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ed25519_dalek::SignatureError> {
-        ed25519_dalek::Keypair::from_bytes(bytes).map(Self)
+        Ok(Keypair(ed25519_dalek::SigningKey::from_bytes(bytes.try_into().unwrap())))
     }
 
     /// Returns this `Keypair` as a byte array
-    pub fn to_bytes(&self) -> [u8; 64] {
-        self.0.to_bytes()
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes().try_into().unwrap()
     }
 
     /// Recovers a `Keypair` from a base58-encoded string
@@ -61,15 +61,15 @@ impl Keypair {
     }
 
     /// Gets this `Keypair`'s SecretKey
-    pub fn secret(&self) -> &ed25519_dalek::SecretKey {
-        &self.0.secret
+    pub fn secret(&self) -> ed25519_dalek::SecretKey {
+        self.0.to_bytes()
     }
 }
 
 impl Signer for Keypair {
     #[inline]
     fn pubkey(&self) -> Pubkey {
-        Pubkey::from(self.0.public.to_bytes())
+        Pubkey::from(self.0.verifying_key().to_bytes())
     }
 
     fn try_pubkey(&self) -> Result<Pubkey, SignerError> {
@@ -101,8 +101,8 @@ where
 /// Reads a JSON-encoded `Keypair` from a `Reader` implementor
 pub fn read_keypair<R: Read>(reader: &mut R) -> Result<Keypair, Box<dyn error::Error>> {
     let bytes: Vec<u8> = serde_json::from_reader(reader)?;
-    let dalek_keypair = ed25519_dalek::Keypair::from_bytes(&bytes)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    let dalek_keypair = ed25519_dalek::SigningKey::from_bytes(&bytes.try_into().unwrap());
+        // .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     Ok(Keypair(dalek_keypair))
 }
 
@@ -158,10 +158,8 @@ pub fn keypair_from_seed(seed: &[u8]) -> Result<Keypair, Box<dyn error::Error>> 
     if seed.len() < ed25519_dalek::SECRET_KEY_LENGTH {
         return Err("Seed is too short".into());
     }
-    let secret = ed25519_dalek::SecretKey::from_bytes(&seed[..ed25519_dalek::SECRET_KEY_LENGTH])
-        .map_err(|e| e.to_string())?;
-    let public = ed25519_dalek::PublicKey::from(&secret);
-    let dalek_keypair = ed25519_dalek::Keypair { secret, public };
+    let secret: ed25519_dalek::SecretKey = seed[..ed25519_dalek::SECRET_KEY_LENGTH].try_into().unwrap();
+    let dalek_keypair = ed25519_dalek::SigningKey::from_bytes(&secret);
     Ok(Keypair(dalek_keypair))
 }
 
@@ -180,13 +178,10 @@ fn bip32_derived_keypair(
     seed: &[u8],
     derivation_path: DerivationPath,
 ) -> Result<Keypair, Bip32Error> {
-    let extended = ed25519_dalek_bip32::ExtendedSecretKey::from_seed(seed)
+    let extended = ed25519_dalek_bip32::ExtendedSigningKey::from_seed(seed)
         .and_then(|extended| extended.derive(&derivation_path))?;
-    let extended_public_key = extended.public_key();
-    Ok(Keypair(ed25519_dalek::Keypair {
-        secret: extended.secret_key,
-        public: extended_public_key,
-    }))
+    let extended_secret_key = extended.signing_key.to_bytes();
+    Ok(Keypair(ed25519_dalek::SigningKey::from_bytes(&extended_secret_key)))
 }
 
 pub fn generate_seed_from_seed_phrase_and_passphrase(

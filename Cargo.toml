@@ -96,3 +96,7 @@ exclude = [
 
 # This prevents a Travis CI error when building for Windows.
 resolver = "2"
+
+[patch.crates-io]
+solana-program = { path = "sdk/program" }
+solana-zk-token-sdk = { path = "./zk-token-sdk" }

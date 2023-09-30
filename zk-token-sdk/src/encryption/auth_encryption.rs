@@ -4,10 +4,11 @@
 #[cfg(not(target_os = "solana"))]
 use {
     aes_gcm_siv::{
-        aead::{Aead, NewAead},
+        aead::Aead,
         Aes128GcmSiv,
     },
     rand::{rngs::OsRng, CryptoRng, Rng, RngCore},
+    cipher::KeyInit
 };
 use {
     arrayref::{array_ref, array_refs},
@@ -51,6 +52,7 @@ impl AuthenticatedEncryption {
 
     #[cfg(not(target_os = "solana"))]
     fn decrypt(key: &AeKey, ct: &AeCiphertext) -> Option<u64> {
+
         let plaintext =
             Aes128GcmSiv::new(&key.0.into()).decrypt(&ct.nonce.into(), ct.ciphertext.as_ref());
 

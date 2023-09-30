@@ -17417,7 +17417,7 @@ pub(crate) mod tests {
         bank.process_transaction(&tx).unwrap();
 
         // ed25519
-        let privkey = ed25519_dalek::Keypair::generate(&mut rand::thread_rng());
+        let privkey = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let message_arr = b"hello";
         let instruction =
             solana_sdk::ed25519_instruction::new_ed25519_instruction(&privkey, message_arr);
