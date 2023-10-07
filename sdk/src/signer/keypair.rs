@@ -64,6 +64,11 @@ impl Keypair {
     pub fn secret(&self) -> ed25519_dalek::SecretKey {
         self.0.to_bytes()
     }
+
+    pub fn pubkey(&self) -> Pubkey {
+        Pubkey::from(self.0.verifying_key().to_bytes())
+    }
+
 }
 
 impl Signer for Keypair {
